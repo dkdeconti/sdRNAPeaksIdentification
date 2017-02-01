@@ -28,3 +28,7 @@ Samples files. List of samples.
 scl enable python27 bash
 source /cccbstore-rc/projects/cccb/pipelines/sRNApipeline/virt_env/bin/activate
 sRNApipeline.sh samplefile adapterfile contrastsfile
+
+
+Note: current github repository is missing repeat elements BED file. Must
+provide own.
