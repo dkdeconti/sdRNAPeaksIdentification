@@ -1,0 +1,30 @@
+This pipeline requires enabling python 2.7 and using a virtualenv 
+contained in the pipeline directory.
+
+
+################################
+# Required files
+################################
+
+Adapter csv file. Comma delimited with columns as following
+col 1: Sample Directory
+col 2: Sample Name
+col 3: Unused
+col 4: Unused
+col 5: Unused
+col 6: adapter sequence
+col 7: Project Name
+
+Contrasts file. Tab delimited with columns as following
+col 1: Experimental sample
+col 2: Control sample
+
+Samples files. List of samples.
+
+################################
+# Usage
+################################
+
+scl enable python27 bash
+source /cccbstore-rc/projects/cccb/pipelines/sRNApipeline/virt_env/bin/activate
+sRNApipeline.sh samplefile adapterfile contrastsfile
