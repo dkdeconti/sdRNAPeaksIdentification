@@ -64,12 +64,13 @@ def clip_fastqs(fastq_map, adapters_map, config, dir_map):
     '''
     clipped_fastq_map = defaultdict(list)
     fastx = config.get('Binaries', 'fastx')
+    suffix = config.get('Suffix', 'clipped')
     for samplename, fastqs in fastq_map.items():
         for fastq in fastqs:
             adapter = adapters_map[fastq]
             clipped_fastq = '/'.join([dir_map["clipfdir"],
                                       re.sub(r'\.fastq.gz',
-                                             '.clipped.fastq.gz',
+                                             suffix + '.fastq.gz',
                                              fastq.split('/')[-1])])
             cmd = ' '.join(["zcat", fastq, "|", fastx, "-a", adapter, "|",
                             "gzip >", clipped_fastq])
@@ -262,7 +263,10 @@ def main():
     if args.nomiR:
         merged_bams_map = mask_bam(merged_bams_map, args.nomiR,
                                    config.get('Suffix', 'no_mir'), config)
-    call_macs(merged_bams_map, contrasts_map, config, dir_map)
+    #optionals = args.noMir + args.noRepeats
+    # TODO add optional arguments addition to name of macs to track
+    # filtering, etc.
+    call_macs(merged_bams_map, contrasts_map, config, dir_map, optionals)
 
 
 
