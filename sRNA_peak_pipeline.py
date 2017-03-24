@@ -48,19 +48,43 @@ def align_reads(fastq_map, genome, config, dir_map):
     return bams
 
 
-def call_macs(bams_map, contrasts, config, dir_map):
+def call_macs(bams_map, contrasts, config, dir_map, optionals=""):
     '''
-    Calls MACS.
+    Calls MACS2.
     '''
+    python = config.get('Binaries', 'macs_python')
+    macs = config.get('Binaries', 'macs')
+    macs_dir = dir_map["macsdir"]
+    peaks = defaultdict(list)
     for experiment, controls in contrasts.items():
         exp_bam = bams_map[experiment]
         for control in controls:
+            positive = "%s_vs_ctrl-%s.positive%s" %\
+                       (experiment, control, optionals)
+            negative = "%s_vs_ctrl-%s.negative%s" %\
+                       (experiment, control, optionals)
+            positive_peaks = os.path.join(macs_dir, positive)
+            negative_peaks = os.path.join(macs_dir, negative)
             ctrl_bam = bams_map[control]
+            cmd1 = ' '.join([python, macs, "callpeak -t", exp_bam,
+                             "-c", ctrl_bam, "--outdir", macs_dir,
+                             "--name", positive,
+                             "-g hs --keep-dup all --nomodel"])
+            cmd2 = ' '.join([python, macs, "callpeak -t", ctrl_bam,
+                             "-c", exp_bam, "--outdir", macs_dir,
+                             "--name", negative,
+                             "-g hs --keep-dup all --nomodel"])
+            if not os.path.exists(positive_peaks):
+                subprocess.call(cmd1, shell=True)
+            if not os.path.exists(negative_peaks):
+                subprocess.call(cmd2, shell=True)
+            peaks[experiment].append(positive, negative)
+    return peaks
 
 
 def clip_fastqs(fastq_map, adapters_map, config, dir_map):
     '''
-    Clipes barcodes from fastqs with fastx.
+    Clips barcodes from fastqs with fastx.
     '''
     clipped_fastq_map = defaultdict(list)
     fastx = config.get('Binaries', 'fastx')
@@ -263,11 +287,13 @@ def main():
     if args.nomiR:
         merged_bams_map = mask_bam(merged_bams_map, args.nomiR,
                                    config.get('Suffix', 'no_mir'), config)
-    #optionals = args.noMir + args.noRepeats
-    # TODO add optional arguments addition to name of macs to track
-    # filtering, etc.
+    optionals = []
+    if args.noRepeats:
+        optionals.append(config.get('Suffix', 'no-repeats'))
+    if args.nomiR:
+        optionals.append(config.get('Suffix', 'no-mir'))
+    optionals = ''.join(optionals)
     call_macs(merged_bams_map, contrasts_map, config, dir_map, optionals)
-
 
 
 if __name__ == "__main__":

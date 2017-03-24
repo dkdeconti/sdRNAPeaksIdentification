@@ -12,6 +12,8 @@ bgzip = ~/bin/bgzip
 tabix = ~/bin/tabix
 vep = ~/bin/ensembl-tools-release-75/scripts/variant_effect_predictor/variant_effect_predictor.pl
 vep_libs = ~/.vep
+macs_python = /ifs/labs/cccb/projects/cccb/apps/MACS2-2.1.1/bin/python
+macs = /ifs/labs/cccb/projects/cccb/apps/MACS2-2.1.1/bin/macs2
 [Suffix]
 clipped = ".clipped"
 no_repeats = ".no_repeats"
