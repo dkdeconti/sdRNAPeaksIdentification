@@ -21,25 +21,24 @@ def align_reads(fastq_map, genome, config, dir_map):
     num_threads = config.get('Options', 'star_threads')
     ref_genome = config.get(genome, 'ref_genome')
     genome_dir = config.get(genome, 'star_dir')
-
     inverted_fastq_map = dict((v, k) for k in fastq_map for v in fastq_map[k])
     fastqs = list(itertools.chain.from_iterable(fastq_map.values()))
     fastq_pairs = map_fastq_pairs(fastqs)
     bams = defaultdict(list)
     for first, second in fastq_pairs.items():
         sample_name = inverted_fastq_map[first]
-        bam_basename = re.sub(r'_R[1-2]_.final.fastq.gz',
-                              '.bam', first).split('/')[-1]
-        basename = '/'.join([dir_map["indbamdir", bam_basename]])
+        bam_basename = re.sub(r'_R[1-2]_.final.clipped.fastq.gz',
+                              '', first).split('/')[-1]
+        basename = '/'.join([dir_map["indbamdir"], bam_basename])
         bam = '.'.join([basename, 'bam'])
         cmd1 = ' '.join([star, '--runThreadN', num_threads,
                          '--genomeDir', genome_dir,
                          '--readFilesIn', first, second,
                          '--readFilesCommand zcat',
                          '--outFileNamePrefix', basename])
-        cmd2 = ' '.join(['mv', basename + '_Aligned.out.sam',
+        cmd2 = ' '.join(['mv', basename + 'Aligned.out.sam',
                          basename + '.sam'])
-        cmd3 = ' '.join([samtools, '-bht', ref_genome, basename + '.sam',
+        cmd3 = ' '.join([samtools, 'view -bht', ref_genome, basename + '.sam',
                          '|', samtools, 'sort', '>', bam])
         bams[sample_name].append(bam)
         if not os.path.exists(bam):
@@ -78,7 +77,7 @@ def call_macs(bams_map, contrasts, config, dir_map, optionals=""):
                 subprocess.call(cmd1, shell=True)
             if not os.path.exists(negative_peaks):
                 subprocess.call(cmd2, shell=True)
-            peaks[experiment].append(positive, negative)
+            peaks[experiment].append((positive, negative))
     return peaks
 
 
@@ -91,7 +90,7 @@ def clip_fastqs(fastq_map, adapters_map, config, dir_map):
     suffix = config.get('Suffix', 'clipped')
     for samplename, fastqs in fastq_map.items():
         for fastq in fastqs:
-            adapter = adapters_map[fastq]
+            adapter = adapters_map[samplename]
             clipped_fastq = '/'.join([dir_map["clipfdir"],
                                       re.sub(r'\.fastq.gz',
                                              suffix + '.fastq.gz',
@@ -160,8 +159,8 @@ def mask_bam(bam_map, mask_bed, suffix, config):
     bedtools = config.get('Binaries', 'bedtools')
     masked_map = {}
     for samplename, bam in bam_map.items():
-        masked_bam = re.sub(r'\.bam', suffix, bam)
-        cmd = ' '.join([bedtools, '-abam', bam, '-b', mask_bed,
+        masked_bam = re.sub(r'\.bam', suffix + '.bam', bam)
+        cmd = ' '.join([bedtools, 'intersect -abam', bam, '-b', mask_bed,
                         '-wa -v >', masked_bam])
         if not os.path.exists(masked_bam):
             subprocess.call(cmd, shell=True)
@@ -215,11 +214,12 @@ def setup_dir(cur_dir, out_dir_name):
     clipf_dir = '/'.join([out_dir, "clipped_fastqs"])
     bam_dir = '/'.join([out_dir, "bam_files"])
     indbam_dir = '/'.join([bam_dir, "individual_bam_files"])
+    macs_dir = '/'.join([out_dir, 'macs_peaks'])
     pileup_dir = '/'.join([out_dir, "pileups"])
+    coverage_dir = '/'.join([out_dir, "coverage"])
     vcf_dir = '/'.join([out_dir, "vcfs"])
     report_dir = '/'.join([out_dir, "report_html"])
-    coverage_dir = '/'.join([out_dir, "coverage"])
-    for folder in [out_dir, bam_dir, indbam_dir, pileup_dir,
+    for folder in [out_dir, clipf_dir, bam_dir, indbam_dir, pileup_dir,
                    coverage_dir, vcf_dir, report_dir]:
         try:
             os.makedirs(folder)
@@ -232,6 +232,7 @@ def setup_dir(cur_dir, out_dir_name):
             "outdir": out_dir,
             "projdir": cur_dir,
             "indbamdir": indbam_dir,
+            "macsdir": macs_dir,
             "pileupdir": pileup_dir,
             "vcfdir": vcf_dir,
             "coveragedir": coverage_dir,
@@ -283,15 +284,15 @@ def main():
     merged_bams_map = merge_bams(indv_bams_maps, config, dir_map)
     if args.noRepeats:
         merged_bams_map = mask_bam(merged_bams_map, args.noRepeats,
-                                   config.get('Suffix', 'no-repeats'), config)
+                                   config.get('Suffix', 'no_repeats'), config)
     if args.nomiR:
         merged_bams_map = mask_bam(merged_bams_map, args.nomiR,
                                    config.get('Suffix', 'no_mir'), config)
     optionals = []
     if args.noRepeats:
-        optionals.append(config.get('Suffix', 'no-repeats'))
+        optionals.append(config.get('Suffix', 'no_repeats'))
     if args.nomiR:
-        optionals.append(config.get('Suffix', 'no-mir'))
+        optionals.append(config.get('Suffix', 'no_mir'))
     optionals = ''.join(optionals)
     call_macs(merged_bams_map, contrasts_map, config, dir_map, optionals)
 

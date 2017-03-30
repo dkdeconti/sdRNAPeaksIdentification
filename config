@@ -1,8 +1,8 @@
 [Binaries]
 samtools = ~/bin/samtools
 bwa = ~/bin/bwa
-star = ~/bin/star
-fastx = ~/bin/fastx
+star = /ifs/labs/cccb/projects/cccb/apps/STAR_2.5.0/bin/Linux_x86_64_static/STAR
+fastx = /ifs/labs/cccb/projects/cccb/apps/fastx_toolkit-0.0.14/bin/fastx_clipper
 java = ~/bin/java
 gatk = ~/bin/gatk.jar
 varscan = ~/bin/varscan.jar
@@ -15,14 +15,13 @@ vep_libs = ~/.vep
 macs_python = /ifs/labs/cccb/projects/cccb/apps/MACS2-2.1.1/bin/python
 macs = /ifs/labs/cccb/projects/cccb/apps/MACS2-2.1.1/bin/macs2
 [Suffix]
-clipped = ".clipped"
-no_repeats = ".no_repeats"
-no_mir = ".no_miR"
-macs_positive = ""
-macs_negative = ""
+clipped = .clipped
+no_repeats = .no_repeats
+no_mir = .no_miR
+bam = .bam
 [hg19]
 ref_genome = /cbhomes2/deconti/scratch/plexwell_pipeline/hg19.fa
-star_dir = 
+star_dir = /ifs/labs/cccb/projects/db/gatk/hg19/STAR_indices_2.5.0
 species = homo_sapiens
 exac_syn = ExAC.syn_z.bed.bgz
 exac_mis = ExAC.mis_z.bed.bgz
