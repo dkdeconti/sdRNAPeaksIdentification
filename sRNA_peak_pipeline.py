@@ -294,7 +294,8 @@ def main():
     if args.nomiR:
         optionals.append(config.get('Suffix', 'no_mir'))
     optionals = ''.join(optionals)
-    call_macs(merged_bams_map, contrasts_map, config, dir_map, optionals)
+    peaks = call_macs(merged_bams_map, contrasts_map, config, dir_map,
+                      optionals)
 
 
 if __name__ == "__main__":
