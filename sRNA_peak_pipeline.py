@@ -104,6 +104,19 @@ def clip_fastqs(fastq_map, adapters_map, config, dir_map):
     return clipped_fastq_map
 
 
+def filter_for_squeezed_peaks(peaks, bams, config, dir_map):
+    '''
+    Filters for narrow peaks in bed file.
+    '''
+    for samplename, contrasts in peaks.items():
+        bam = bams[samplename]
+        for positive, negative in contrasts:
+            f_positive = ''
+            f_negative = ''
+            pass
+    return 
+
+
 def get_adapters(adapters_file):
     '''
     Maps fastq and adapter from TSV.
@@ -296,6 +309,10 @@ def main():
     optionals = ''.join(optionals)
     peaks = call_macs(merged_bams_map, contrasts_map, config, dir_map,
                       optionals)
+    f_peaks = filter_for_squeezed_peaks(peaks, merged_bams_map, config, dir_map)
+    # bedtools closest may be a very useful feature
+    # may be worthwhile to use histogram coverage from bedtools coverage
+    # to filter peaks
 
 
 if __name__ == "__main__":
