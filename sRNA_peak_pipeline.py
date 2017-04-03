@@ -21,6 +21,7 @@ def align_reads(fastq_map, genome, config, dir_map):
     num_threads = config.get('Options', 'star_threads')
     ref_genome = config.get(genome, 'ref_genome')
     genome_dir = config.get(genome, 'star_dir')
+    # inverts map to link the fastq to its samplename to map in another dict
     inverted_fastq_map = dict((v, k) for k in fastq_map for v in fastq_map[k])
     fastqs = list(itertools.chain.from_iterable(fastq_map.values()))
     fastq_pairs = map_fastq_pairs(fastqs)
@@ -40,9 +41,10 @@ def align_reads(fastq_map, genome, config, dir_map):
                          basename + '.sam'])
         cmd3 = ' '.join([samtools, 'view -bht', ref_genome, basename + '.sam',
                          '|', samtools, 'sort', '>', bam])
+        cmd4 = ' '.join([samtools, "index", bam])
         bams[sample_name].append(bam)
         if not os.path.exists(bam):
-            for cmd in (cmd1, cmd2, cmd3):
+            for cmd in (cmd1, cmd2, cmd3, cmd4):
                 subprocess.call(cmd, shell=True)
     return bams
 
@@ -77,7 +79,7 @@ def call_macs(bams_map, contrasts, config, dir_map, optionals=""):
                 subprocess.call(cmd1, shell=True)
             if not os.path.exists(negative_peaks):
                 subprocess.call(cmd2, shell=True)
-            peaks[experiment].append((positive, negative))
+            peaks[experiment].append((positive, negative, exp_bam, control))
     return peaks
 
 
@@ -110,9 +112,14 @@ def filter_for_squeezed_peaks(peaks, bams, config, dir_map):
     '''
     for samplename, contrasts in peaks.items():
         bam = bams[samplename]
-        for positive, negative in contrasts:
-            f_positive = ''
-            f_negative = ''
+        for positive, negative, pos_bam, neg_bam in contrasts:
+            # Run bedtools coverage -hist -a bed -b bam to temp file
+            # read temp file (ignore all)
+            # Pull peaks where 26-35 bp peak modes are > 70% of hist
+            # dict of peakname : bed
+            # dict of peakname : pass/fail
+            # filter and map
+            # parse bam for strand information from filtered peaks
             pass
     return 
 
