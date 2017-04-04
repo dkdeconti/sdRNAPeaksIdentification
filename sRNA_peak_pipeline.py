@@ -7,10 +7,31 @@ import argparse
 import ConfigParser
 import itertools
 import os
+import pysam
 import re
 import subprocess
 import sys
 
+
+def add_strands(beds, bam):
+    '''
+    Adds strand information to beds from BAM file.
+    '''
+    stranded_beds = []
+    samfile = pysam.AlignmentFile(bam)
+    for bed in beds:
+        chrom = bed[0]
+        start = int(bed[1])
+        end = int(bed[2])
+        reads = [read.is_reverse for read in samfile.fetch(chrom, start, end)]
+        pos = reads.count(False)
+        neg = reads.count(True)
+        if pos < neg:
+            strand = '-'
+        else:
+            strand = '+'
+        stranded_beds.append(bed[:5] + [strand] + bed[6:])
+    return stranded_beds
 
 def align_reads(fastq_map, genome, config, dir_map):
     '''
@@ -110,18 +131,26 @@ def filter_for_squeezed_peaks(peaks, bams, config, dir_map):
     '''
     Filters for narrow peaks in bed file.
     '''
+    bedtools = config.get('Binaries', 'bedtools')
+    filt_beds = defaultdict(list)
     for samplename, contrasts in peaks.items():
         bam = bams[samplename]
         for positive, negative, pos_bam, neg_bam in contrasts:
-            # Run bedtools coverage -hist -a bed -b bam to temp file
-            # read temp file (ignore all)
-            # Pull peaks where 26-35 bp peak modes are > 70% of hist
-            # dict of peakname : bed
-            # dict of peakname : pass/fail
-            # filter and map
-            # parse bam for strand information from filtered peaks
-            pass
-    return 
+            bed_out = []
+            for bed, bam in ((positive, pos_bam), (negative, neg_bam)):
+                suffix_pos = re.search(r'.narrowPeak', bed).start()
+                bed_basename = bed.split('/')[-1][:suffix_pos]
+                filt_bed_name = '/'.join([dir_map["sizefiltmacsdir"],
+                                          bed_basename + ".size_filt.bed"])
+                tmp = '/'.join([dir_map["outdir"], "bedtools_coverage.tmp"])
+                cmd = ' '.join([bedtools, 'coverage', '-hist',
+                                '-a', bed, '-b', bam, '>', tmp])
+                subprocess.call(cmd, shell=True)
+                write_bed(add_strands(parse_bedtools_hist(tmp), bam),
+                          filt_bed_name)
+                bed_out.append(filt_bed_name)
+            filt_beds[samplename].append(bed_out)
+    return filt_beds
 
 
 def get_adapters(adapters_file):
@@ -221,6 +250,32 @@ def parse_contrasts(filename):
     return contrasts_map
 
 
+def parse_bedtools_hist(hist_filename):
+    '''
+    Parses bedtools coverage --hist for regions 28-36bp & >=70% coverage.
+    '''
+    # TODO in future allow passing arguments for filtering.
+    #f_bed = '/'.join([dir_map["sizefiltmacsdir"], basename + "small_peaks.bed"])
+    filtered_bed_regions = []
+    with open(hist_filename, 'rU') as handle:
+        for line in handle:
+            arow = line.strip('\n').split('\t')
+            size = int(arow[12])
+            frac = float(arow[13])
+            if 28 <= size <= 36 and frac >= 0.70:
+                filtered_bed_regions.append(arow[:10])
+    return filtered_bed_regions
+
+
+def write_bed(beds, filename):
+    '''
+    Writes list of bed rows to file.
+    '''
+    with open(filename, 'w') as handle:
+        for bed in beds:
+            handle.write('\t'.join(bed) + '\n')
+
+
 def setup_dir(cur_dir, out_dir_name):
     '''
     Sets up map of directories in output directory.
@@ -235,6 +290,7 @@ def setup_dir(cur_dir, out_dir_name):
     bam_dir = '/'.join([out_dir, "bam_files"])
     indbam_dir = '/'.join([bam_dir, "individual_bam_files"])
     macs_dir = '/'.join([out_dir, 'macs_peaks'])
+    size_filt_macs_dir = '/'.join([macs_dir, 'size_filtered_macs_dir'])
     pileup_dir = '/'.join([out_dir, "pileups"])
     coverage_dir = '/'.join([out_dir, "coverage"])
     vcf_dir = '/'.join([out_dir, "vcfs"])
@@ -253,6 +309,7 @@ def setup_dir(cur_dir, out_dir_name):
             "projdir": cur_dir,
             "indbamdir": indbam_dir,
             "macsdir": macs_dir,
+            "sizefiltmacsdir": size_filt_macs_dir,
             "pileupdir": pileup_dir,
             "vcfdir": vcf_dir,
             "coveragedir": coverage_dir,
