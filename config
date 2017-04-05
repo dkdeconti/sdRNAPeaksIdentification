@@ -19,6 +19,7 @@ clipped = .clipped
 no_repeats = .no_repeats
 no_mir = .no_miR
 bam = .bam
+homer = .homer_annot.bed
 [hg19]
 ref_genome = /cbhomes2/deconti/scratch/plexwell_pipeline/hg19.fa
 star_dir = /ifs/labs/cccb/projects/db/gatk/hg19/STAR_indices_2.5.0

@@ -30,8 +30,32 @@ def add_strands(beds, bam):
             strand = '-'
         else:
             strand = '+'
-        stranded_beds.append(bed[:5] + [strand] + bed[6:])
+        stranded_beds.append(bed[:5] + [strand] + bed[6:] + 
+                             [str(pos), str(neg)])
     return stranded_beds
+
+
+def annotate_w_homer(bed, genome, config, dir_map):
+    '''
+    Annotates bed file with HOMER.
+    '''
+    homer_beds = defaultdict(list)
+    homer = config.get("Binaries", "HOMER")
+    for samplename, contrasts in bed.items():
+        for positive, negative in contrasts:
+            out_beds = []
+            for bed in (positive, negative):
+                homer_basename = re.sub(r'.bed',
+                                        config.get('Suffix', 'homer'),
+                                        bed.split('/')[-1])
+                homer_bed = '/'.join([dir_map["homerdir"], homer_basename])
+                cmd = ' '.join([homer, bed, genome, '>', homer_bed])
+                if not os.path.exists(homer_bed):
+                    subprocess.call(cmd, shell=True)
+                out_beds.append(homer_bed)
+            homer_beds[samplename].append(out_beds)
+    return homer_beds
+
 
 def align_reads(fastq_map, genome, config, dir_map):
     '''
@@ -143,11 +167,12 @@ def filter_for_squeezed_peaks(peaks, bams, config, dir_map):
                 filt_bed_name = '/'.join([dir_map["sizefiltmacsdir"],
                                           bed_basename + ".size_filt.bed"])
                 tmp = '/'.join([dir_map["outdir"], "bedtools_coverage.tmp"])
-                cmd = ' '.join([bedtools, 'coverage', '-hist',
-                                '-a', bed, '-b', bam, '>', tmp])
-                subprocess.call(cmd, shell=True)
-                write_bed(add_strands(parse_bedtools_hist(tmp), bam),
-                          filt_bed_name)
+                if not os.path.exists(filt_bed_name):
+                    cmd = ' '.join([bedtools, 'coverage', '-hist',
+                                    '-a', bed, '-b', bam, '>', tmp])
+                    subprocess.call(cmd, shell=True)
+                    write_bed(add_strands(parse_bedtools_hist(tmp), bam),
+                              filt_bed_name)
                 bed_out.append(filt_bed_name)
             filt_beds[samplename].append(bed_out)
     return filt_beds
