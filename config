@@ -14,6 +14,8 @@ vep = ~/bin/ensembl-tools-release-75/scripts/variant_effect_predictor/variant_ef
 vep_libs = ~/.vep
 macs_python = /ifs/labs/cccb/projects/cccb/apps/MACS2-2.1.1/bin/python
 macs = /ifs/labs/cccb/projects/cccb/apps/MACS2-2.1.1/bin/macs2
+HOMER_dir = /ifs/labs/cccb/projects/cccb/apps/HOMER_v4.8/bin/
+HOMER = /ifs/labs/cccb/projects/cccb/apps/HOMER_v4.8/bin/annotatePeaks.pl
 [Suffix]
 clipped = .clipped
 no_repeats = .no_repeats

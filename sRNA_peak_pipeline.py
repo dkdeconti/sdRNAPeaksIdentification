@@ -43,17 +43,19 @@ def annotate_w_homer(bed, genome, config, dir_map):
     homer = config.get("Binaries", "HOMER")
     for samplename, contrasts in bed.items():
         for positive, negative in contrasts:
-            out_beds = []
             for bed in (positive, negative):
                 homer_basename = re.sub(r'.bed',
                                         config.get('Suffix', 'homer'),
                                         bed.split('/')[-1])
                 homer_bed = '/'.join([dir_map["homerdir"], homer_basename])
-                cmd = ' '.join([homer, bed, genome, '>', homer_bed])
+                path = config.get('Binaries', 'HOMER_dir')
+                cmd = ' '.join(["PATH=$PATH:%s;" % path, "cut -f1-6", bed,
+                                "|", homer, "-", genome, '>', homer_bed])
                 if not os.path.exists(homer_bed):
                     subprocess.call(cmd, shell=True)
-                out_beds.append(homer_bed)
-            homer_beds[samplename].append(out_beds)
+                else:
+                    sys.stderr.write(cmd + '\n')
+                homer_beds[samplename].append((homer_bed, bed))
     return homer_beds
 
 
@@ -111,6 +113,8 @@ def call_macs(bams_map, contrasts, config, dir_map, optionals=""):
                        (experiment, control, optionals)
             positive_peaks = os.path.join(macs_dir, positive)
             negative_peaks = os.path.join(macs_dir, negative)
+            positive_bed = positive_peaks + "_peaks.narrowPeak"
+            negative_bed = negative_peaks + "_peaks.narrowPeak"
             ctrl_bam = bams_map[control]
             cmd1 = ' '.join([python, macs, "callpeak -t", exp_bam,
                              "-c", ctrl_bam, "--outdir", macs_dir,
@@ -120,11 +124,16 @@ def call_macs(bams_map, contrasts, config, dir_map, optionals=""):
                              "-c", exp_bam, "--outdir", macs_dir,
                              "--name", negative,
                              "-g hs --keep-dup all --nomodel"])
-            if not os.path.exists(positive_peaks):
+            if not os.path.exists(positive_bed):
                 subprocess.call(cmd1, shell=True)
-            if not os.path.exists(negative_peaks):
+            else:
+                sys.stderr.write(cmd1 + '\n')
+            if not os.path.exists(negative_bed):
                 subprocess.call(cmd2, shell=True)
-            peaks[experiment].append((positive, negative, exp_bam, control))
+            else:
+                sys.stderr.write(cmd2 + '\n')
+            peaks[experiment].append((positive_bed, negative_bed,
+                                      exp_bam, ctrl_bam))
     return peaks
 
 
@@ -151,14 +160,13 @@ def clip_fastqs(fastq_map, adapters_map, config, dir_map):
     return clipped_fastq_map
 
 
-def filter_for_squeezed_peaks(peaks, bams, config, dir_map):
+def filter_for_squeezed_peaks(peaks, config, dir_map):
     '''
     Filters for narrow peaks in bed file.
     '''
     bedtools = config.get('Binaries', 'bedtools')
     filt_beds = defaultdict(list)
     for samplename, contrasts in peaks.items():
-        bam = bams[samplename]
         for positive, negative, pos_bam, neg_bam in contrasts:
             bed_out = []
             for bed, bam in ((positive, pos_bam), (negative, neg_bam)):
@@ -167,12 +175,14 @@ def filter_for_squeezed_peaks(peaks, bams, config, dir_map):
                 filt_bed_name = '/'.join([dir_map["sizefiltmacsdir"],
                                           bed_basename + ".size_filt.bed"])
                 tmp = '/'.join([dir_map["outdir"], "bedtools_coverage.tmp"])
+                cmd = ' '.join([bedtools, 'coverage', '-hist',
+                                '-a', bed, '-b', bam, '>', tmp])
                 if not os.path.exists(filt_bed_name):
-                    cmd = ' '.join([bedtools, 'coverage', '-hist',
-                                    '-a', bed, '-b', bam, '>', tmp])
                     subprocess.call(cmd, shell=True)
                     write_bed(add_strands(parse_bedtools_hist(tmp), bam),
                               filt_bed_name)
+                else:
+                    sys.stderr.write(cmd + '\n')
                 bed_out.append(filt_bed_name)
             filt_beds[samplename].append(bed_out)
     return filt_beds
@@ -261,6 +271,36 @@ def merge_bams(indv_bams_map, config, dir_map):
     return merged_bams
 
 
+def merge_annot_to_bed(homer_beds, config, dir_map):
+    '''
+    Merges data from HOMER annotated beds with MACS beds.
+    '''
+    final_map = defaultdict(list)
+    header = ["chrom", "start", "end", "peak_name", "score", "strand",
+              "fold_change", "-log10_pval", "-log10_qval", "dist_to_summit",
+              "positive_reads", "negative_reads", "annotation",
+              "detail_annotation", "distance_to_nearest_RefSeq_TSS",
+              "Nearest_TSS-Native_ID", "Nearest_TSS-Entrez_Gene_ID",
+              "Nearest_TSS-Unigene_ID", "Nearest_TSS-RefSeq_ID",
+              "Nearest_TSS-Ensembl_ID", "Nearest_TSS-Gene_Symbol",
+              "Nearest_TSS-Gene_Aliases", "Nearest_TSS-Gene_Description"]
+    for samplename, beds in homer_beds.items():
+        for homer, peak in beds:
+            final_basename = re.sub(r'.bed', '.final.bed', homer.split('/')[-1])
+            final_bed = '/'.join([dir_map["finaldir"], final_basename])
+            homer_map = parse_bed_by_peakname(homer, 0, skip_header=True)
+            peak_map = parse_bed_by_peakname(peak, 3, skip_header=False)
+            if not os.path.exists(final_bed):
+                with open(final_bed, 'w') as handle:
+                    handle.write('\t'.join(header) + '\n')
+                    for peak_name, homer_row in homer_map.items():
+                        peak_row = peak_map[peak_name]
+                        out_row = peak_row + homer_row[7:]
+                        handle.write('\t'.join(out_row) + '\n')
+            final_map[samplename].append(final_bed)
+    return final_map
+
+
 def parse_contrasts(filename):
     '''
     Parses two column TSV for contrasts.
@@ -279,17 +319,34 @@ def parse_bedtools_hist(hist_filename):
     '''
     Parses bedtools coverage --hist for regions 28-36bp & >=70% coverage.
     '''
-    # TODO in future allow passing arguments for filtering.
-    #f_bed = '/'.join([dir_map["sizefiltmacsdir"], basename + "small_peaks.bed"])
     filtered_bed_regions = []
+    peaks = {}
     with open(hist_filename, 'rU') as handle:
         for line in handle:
+            if re.match("all", line):
+                continue
             arow = line.strip('\n').split('\t')
-            size = int(arow[12])
-            frac = float(arow[13])
-            if 28 <= size <= 36 and frac >= 0.70:
-                filtered_bed_regions.append(arow[:10])
+            peak_id = arow[3]
+            if peak_id not in peaks or int(arow[10]) > int(peaks[peak_id][10]):
+                peaks[peak_id] = arow
+    filtered_bed_regions = [v[:10] for v in peaks.values()
+                            if 28 <= int(v[11]) <= 36]
     return filtered_bed_regions
+
+
+def parse_bed_by_peakname(bed_filename, name_idx, skip_header=False):
+    '''
+    Parses bed file to return dict os split rows by peak name.
+    '''
+    row_map = {}
+    with open(bed_filename, 'rU') as handle:
+        if skip_header:
+            handle.readline()
+        for line in handle:
+            arow = line.strip('\n').split('\t')
+            peak_name = arow[name_idx]
+            row_map[peak_name] = arow
+    return row_map
 
 
 def write_bed(beds, filename):
@@ -316,12 +373,10 @@ def setup_dir(cur_dir, out_dir_name):
     indbam_dir = '/'.join([bam_dir, "individual_bam_files"])
     macs_dir = '/'.join([out_dir, 'macs_peaks'])
     size_filt_macs_dir = '/'.join([macs_dir, 'size_filtered_macs_dir'])
-    pileup_dir = '/'.join([out_dir, "pileups"])
-    coverage_dir = '/'.join([out_dir, "coverage"])
-    vcf_dir = '/'.join([out_dir, "vcfs"])
-    report_dir = '/'.join([out_dir, "report_html"])
-    for folder in [out_dir, clipf_dir, bam_dir, indbam_dir, pileup_dir,
-                   coverage_dir, vcf_dir, report_dir]:
+    homer_dir = '/'.join([out_dir, "homer_annot_dir"])
+    final_dir = '/'.join([out_dir, "final_annot"])
+    for folder in [out_dir, clipf_dir, bam_dir, indbam_dir, macs_dir,
+                   size_filt_macs_dir, homer_dir, final_dir]:
         try:
             os.makedirs(folder)
         except OSError as err:
@@ -335,10 +390,8 @@ def setup_dir(cur_dir, out_dir_name):
             "indbamdir": indbam_dir,
             "macsdir": macs_dir,
             "sizefiltmacsdir": size_filt_macs_dir,
-            "pileupdir": pileup_dir,
-            "vcfdir": vcf_dir,
-            "coveragedir": coverage_dir,
-            "reportdir": report_dir}
+            "homerdir": homer_dir,
+            "finaldir": final_dir}
 
 
 def main():
@@ -360,6 +413,9 @@ def main():
     parser.add_argument("-o", "--outdir",
                         metavar="OUTPUT_DIR",
                         help="output dir; relative to -d; default: sRNA_peaks")
+    parser.add_argument("-g", "--genome",
+                        metavar="GENOME",
+                        help="genome; [hg19,]; default: hg19")
     parser.add_argument("--noRepeats",
                         metavar="REAPEATS_BED",
                         help="Mask repeat regions")
@@ -396,9 +452,11 @@ def main():
     if args.nomiR:
         optionals.append(config.get('Suffix', 'no_mir'))
     optionals = ''.join(optionals)
-    peaks = call_macs(merged_bams_map, contrasts_map, config, dir_map,
-                      optionals)
-    f_peaks = filter_for_squeezed_peaks(peaks, merged_bams_map, config, dir_map)
+    peaks_map = call_macs(merged_bams_map, contrasts_map, config, dir_map,
+                          optionals)
+    f_peaks_map = filter_for_squeezed_peaks(peaks_map, config, dir_map)
+    homer_map = annotate_w_homer(f_peaks_map, args.genome, config, dir_map)
+    _ = merge_annot_to_bed(homer_map, config, dir_map)
     # bedtools closest may be a very useful feature
     # may be worthwhile to use histogram coverage from bedtools coverage
     # to filter peaks
