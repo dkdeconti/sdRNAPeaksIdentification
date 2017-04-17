@@ -162,7 +162,7 @@ def clip_fastqs(fastq_map, adapters_map, config, dir_map):
 
 def filter_for_squeezed_peaks(peaks, config, dir_map):
     '''
-    Filters for narrow peaks in bed file.
+    Filters for narrow peaks in bed file; adds strand info.
     '''
     bedtools = config.get('Binaries', 'bedtools')
     filt_beds = defaultdict(list)
@@ -457,9 +457,6 @@ def main():
     f_peaks_map = filter_for_squeezed_peaks(peaks_map, config, dir_map)
     homer_map = annotate_w_homer(f_peaks_map, args.genome, config, dir_map)
     _ = merge_annot_to_bed(homer_map, config, dir_map)
-    # bedtools closest may be a very useful feature
-    # may be worthwhile to use histogram coverage from bedtools coverage
-    # to filter peaks
 
 
 if __name__ == "__main__":
