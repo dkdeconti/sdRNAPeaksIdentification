@@ -3,9 +3,12 @@ Detects small RNA peaks with annotated data.
 '''
 
 from collections import defaultdict
+from Bio.Alphabet import IUPAC
+from Bio.Seq import Seq
 import argparse
 import ConfigParser
 import itertools
+import numpy
 import os
 import pysam
 import re
@@ -30,8 +33,11 @@ def add_strands(beds, bam):
             strand = '-'
         else:
             strand = '+'
+        seq_start, seq_end, seq, seq_rc = get_peak_seq(chrom, start, end,
+                                                       samfile, strand)
         stranded_beds.append(bed[:5] + [strand] + bed[6:] + 
-                             [str(pos), str(neg)])
+                             [seq_start, seq_end, str(pos), str(neg), seq,
+                              seq_rc])
     return stranded_beds
 
 
@@ -174,16 +180,23 @@ def filter_for_squeezed_peaks(peaks, config, dir_map):
                 bed_basename = bed.split('/')[-1][:suffix_pos]
                 filt_bed_name = '/'.join([dir_map["sizefiltmacsdir"],
                                           bed_basename + ".size_filt.bed"])
-                tmp = '/'.join([dir_map["outdir"], "bedtools_coverage.tmp"])
-                cmd = ' '.join([bedtools, 'coverage', '-hist',
-                                '-a', bed, '-b', bam, '>', tmp])
-                if not os.path.exists(filt_bed_name):
-                    subprocess.call(cmd, shell=True)
-                    write_bed(add_strands(parse_bedtools_hist(tmp), bam),
-                              filt_bed_name)
-                else:
-                    sys.stderr.write(cmd + '\n')
+                f_beds = [b for b in parse_bed_to_list(bed) if is_tight(b, bam)]
+                write_bed(add_strands(f_beds, bam), filt_bed_name)
                 bed_out.append(filt_bed_name)
+                #suffix_pos = re.search(r'.narrowPeak', bed).start()
+                #bed_basename = bed.split('/')[-1][:suffix_pos]
+                #filt_bed_name = '/'.join([dir_map["sizefiltmacsdir"],
+                #                          bed_basename + ".size_filt.bed"])
+                #tmp = '/'.join([dir_map["outdir"], "bedtools_coverage.tmp"])
+                #cmd = ' '.join([bedtools, 'coverage', '-hist',
+                #                '-a', bed, '-b', bam, '>', tmp])
+                #if not os.path.exists(filt_bed_name):
+                #    subprocess.call(cmd, shell=True)
+                #    write_bed(add_strands(parse_bedtools_hist(tmp), bam),
+                #              filt_bed_name)
+                #else:
+                #    sys.stderr.write(cmd + '\n')
+                #bed_out.append(filt_bed_name)
             filt_beds[samplename].append(bed_out)
     return filt_beds
 
@@ -200,6 +213,59 @@ def get_adapters(adapters_file):
             adapter = arow[5]
             adapters_map[samplename] = adapter
     return adapters_map
+
+
+def get_peak_seq(chrom, start, end, samfile, strand):
+    '''
+    Defines summit of peak from reads and give position and sequence.
+    '''
+    seq_counts = defaultdict(int)
+    seq_pos = {}
+    for read in samfile.fetch(chrom, start, end):
+        seq_counts[read.query_sequence] += 1
+        seq_pos[read.query_sequence] = read.reference_start
+    try:
+        seq = max(seq_counts, key=seq_counts.get)
+        seq_rc = str(Seq(seq, IUPAC.unambiguous_dna).reverse_complement())
+        seq_start = seq_pos[seq]
+        seq_end = seq_start + len(seq)
+    except (KeyError, ValueError) as e:
+        seq = "NA"
+        seq_rc = "NA"
+        seq_start = "NA"
+        seq_end = "NA"
+    if strand == '-':
+        seq, seq_rc = seq_rc, seq
+        seq_start, seq_end = seq_end, seq_start
+    return seq_start, seq_end, seq, seq_rc
+
+
+def is_tight(bed, bam):
+    '''
+    Determines if peak is narrow enough to include.
+    '''
+    samfile = pysam.AlignmentFile(bam, 'rb')
+    #chrom, start, end = bed[:3]
+    chrom = bed[0]
+    start = int(bed[1])
+    end = int(bed[2])
+    depths = dict([(col.pos, len(col.pileups))
+                   for col in samfile.pileup(chrom, start, end)
+                   if start <= col.pos <= end])
+    depth = [0]*(end - start + 1)
+    for k in depths:
+        try:
+            depth[k-start] = depths[k]
+        except IndexError:
+            continue
+    summit = max(depth)
+    model = [0]*len(depth)
+    for i, v in enumerate(depth):
+        if v > summit - 2:
+            model[i] = v
+    nonmodel = sum(list(numpy.subtract(depth, model)))/float(len(depth))
+    if max(depth) > 5 and nonmodel >= 0.5:
+        return True
 
 
 def map_fastq_from_tsv(fastq_tsv):
@@ -349,13 +415,24 @@ def parse_bed_by_peakname(bed_filename, name_idx, skip_header=False):
     return row_map
 
 
+def parse_bed_to_list(bed_filename):
+    '''
+    Returns bed file as list of split rows.
+    '''
+    beds = []
+    with open(bed_filename, 'rU') as handle:
+        for line in handle:
+            beds.append(line.strip('\n').split('\t'))
+    return beds
+
+
 def write_bed(beds, filename):
     '''
     Writes list of bed rows to file.
     '''
     with open(filename, 'w') as handle:
         for bed in beds:
-            handle.write('\t'.join(bed) + '\n')
+            handle.write('\t'.join([str(b) for b in bed]) + '\n')
 
 
 def setup_dir(cur_dir, out_dir_name):
