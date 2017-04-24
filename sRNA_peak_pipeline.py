@@ -344,12 +344,14 @@ def merge_annot_to_bed(homer_beds, config, dir_map):
     final_map = defaultdict(list)
     header = ["chrom", "start", "end", "peak_name", "score", "strand",
               "fold_change", "-log10_pval", "-log10_qval", "dist_to_summit",
+              "summit_start", "summit_end", "read_seq", "read_seq_rc",
               "positive_reads", "negative_reads", "annotation",
               "detail_annotation", "distance_to_nearest_RefSeq_TSS",
               "Nearest_TSS-Native_ID", "Nearest_TSS-Entrez_Gene_ID",
               "Nearest_TSS-Unigene_ID", "Nearest_TSS-RefSeq_ID",
               "Nearest_TSS-Ensembl_ID", "Nearest_TSS-Gene_Symbol",
-              "Nearest_TSS-Gene_Aliases", "Nearest_TSS-Gene_Description"]
+              "Nearest_TSS-Gene_Aliases", "Nearest_TSS-Gene_Description",
+              "annotation_type"]
     for samplename, beds in homer_beds.items():
         for homer, peak in beds:
             final_basename = re.sub(r'.bed', '.final.bed', homer.split('/')[-1])
