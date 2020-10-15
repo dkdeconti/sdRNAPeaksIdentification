@@ -16,8 +16,31 @@ python sdRNA_peak_pipeline.py \
   two-column-paired-contrasts.tsv;  
 ```
 
-## Help output
+## CLI help output
 
 ```bash
+usage: sdRNA_peak_pipeline.py [-h] [-d PROJECT_DIR] [-a ADAPTERS]
+                              [-o OUTPUT_DIR] [-g GENOME]
+                              [--noRepeats REAPEATS_BED] [--nomiR MIR_bed]
+                              FASTQTSV ContrastFile
 
+MACS-based sRNA peak id
+
+positional arguments:
+  FASTQTSV              TSV of sample name and FASTQ
+  ContrastFile          Two column TSV of pairs
+
+optional arguments:
+  -h, --help            show this help message and exit
+  -d PROJECT_DIR, --projectdir PROJECT_DIR
+                        project directory; default: .
+  -a ADAPTERS, --adapters ADAPTERS
+                        adapters file
+  -o OUTPUT_DIR, --outdir OUTPUT_DIR
+                        output dir; relative to -d; default: sRNA_peaks
+  -g GENOME, --genome GENOME
+                        genome; [hg19,]; default: hg19
+  --noRepeats REAPEATS_BED
+                        Mask repeat regions
+  --nomiR MIR_bed       Mask miRs
 ```
